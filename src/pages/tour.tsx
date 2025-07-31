@@ -1,8 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Navbar from "@/components/Navbar";
 import Loader from "../components/Loader";
-import * as THREE from "three";
 import { useRouter } from "next/router";
 
 interface Tradisi {
@@ -25,196 +24,241 @@ interface Panorama {
 
 export default function Tour() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const viewerRef = useRef<any>(null);
+  const panoramaObjectsRef = useRef<{ [key: string]: any }>({});
+  const popupRefs = useRef<HTMLElement[]>([]);
+
+  // Utility untuk hapus semua popup
+  const removeAllPopups = () => {
+    popupRefs.current.forEach((popup) => popup.remove());
+    popupRefs.current = [];
+  };
 
   useEffect(() => {
-    let viewer: any;
-    let panoramaObjects: { [key: string]: any } = {};
+    let isMounted = true;
 
     const loadPanorama = async () => {
-      const PANOLENS = await import("panolens");
-      const container = document.getElementById("panorama") as HTMLElement;
+      try {
+        const THREE = await import("three");
+        const PANOLENS = await import("panolens");
 
-      while (container.firstChild) container.removeChild(container.firstChild);
+        const container = document.getElementById("panorama") as HTMLElement;
+        if (!container) return;
 
-      const panoramaRes = await fetch("/api/panorama");
-      const panoramas: Panorama[] = await panoramaRes.json();
+        const [panoramaRes, tradisiRes] = await Promise.all([
+          fetch("/api/panorama"),
+          fetch("/api/tradisi"),
+        ]);
 
-      const tradisiRes = await fetch("/api/tradisi");
-      const tradisiList: Tradisi[] = await tradisiRes.json();
-
-      panoramas.forEach((pano) => {
-        panoramaObjects[pano.gambar] = new PANOLENS.ImagePanorama(
-          `/images/${pano.gambar}`
-        );
-      });
-
-      viewer = new PANOLENS.Viewer({
-        container,
-        autoRotate: true,
-        autoRotateSpeed: 0.5,
-        controlBar: true,
-        cameraFov: 70,
-      });
-      viewer.renderer.setPixelRatio(window.devicePixelRatio);
-
-      Object.values(panoramaObjects).forEach((pano) => viewer.add(pano));
-
-      panoramaObjects[panoramas[0].gambar].addEventListener(
-        "progress",
-        (e: any) => {
-          const progress = (e.progress.loaded / e.progress.total) * 100;
-          if (progress > 30 && loading) {
-            setTimeout(() => setLoading(false), 300);
-          }
+        if (!panoramaRes.ok || !tradisiRes.ok) {
+          setError("Gagal memuat data panorama atau tradisi.");
+          setLoading(false);
+          return;
         }
-      );
 
-      // ✅ Fungsi untuk menambahkan infospot ke panorama tertentu
-      const addInfospots = (panoKey: string) => {
-        const panorama = panoramaObjects[panoKey];
+        const panoramas: Panorama[] = await panoramaRes.json();
+        const tradisiList: Tradisi[] = await tradisiRes.json();
 
-        // ✅ Cegah duplikasi: jika sudah ditambahkan, langsung return
-        if (panorama.userData.infospotAdded) return;
+        if (!isMounted) return;
 
-        tradisiList
-          .filter((t) => t.panorama === panoKey)
-          .forEach((tradisi) => {
-            const infoSpot = new PANOLENS.Infospot(800, "/images/info.png");
-            infoSpot.position.set(
-              tradisi.posisi_x,
-              tradisi.posisi_y,
-              tradisi.posisi_z
-            );
+        const viewer = new PANOLENS.Viewer({
+          container,
+          autoRotate: true,
+          autoRotateSpeed: 0.5,
+          controlBar: true,
+          cameraFov: 70,
+        });
+        viewerRef.current = viewer;
 
-            // ✅ Pastikan tidak menambahkan hover text double
-            if (
-              !infoSpot.element ||
-              infoSpot.element.innerText !== tradisi.nama_tradisi
-            ) {
-              infoSpot.addHoverText(tradisi.nama_tradisi, 80);
-            }
+        // Fungsi menambahkan infospot
+        const addInfospots = (panoKey: string) => {
+          const panorama = panoramaObjectsRef.current[panoKey];
+          const tradisiForPano = tradisiList.filter((t) => t.panorama === panoKey);
+          console.log("addInfospots:", { panoKey, tradisiForPano });
+          if (panorama.userData.infospotAdded) return;
 
-            infoSpot.addEventListener("click", () => {
-              document
-                .querySelectorAll(".popup-tradisi")
-                .forEach((el) => el.remove());
-
+          tradisiForPano.forEach((t) => {
+            const spot = new PANOLENS.Infospot(800, "/images/info.png");
+            spot.position.set(t.posisi_x, t.posisi_y, t.posisi_z);
+            spot.addHoverText(t.nama_tradisi, 80);
+            spot.addEventListener("click", () => {
+              removeAllPopups();
               const popup = document.createElement("div");
               popup.className = "popup-tradisi";
-              popup.style.position = "fixed";
-              popup.style.top = "50%";
-              popup.style.left = "50%";
-              popup.style.transform = "translate(-50%, -50%)";
-              popup.style.background = "rgba(255,255,255,0.97)";
-              popup.style.padding = "15px";
-              popup.style.borderRadius = "12px";
-              popup.style.width = "300px";
-              popup.style.zIndex = "9999";
-              popup.style.boxShadow = "0 0 20px rgba(168,85,247,0.7)";
-              popup.style.fontSize = "14px";
               popup.innerHTML = `
-                <h3 style="font-size:18px; font-weight:bold; margin-bottom:8px; color:#a855f7">
-                  ${tradisi.nama_tradisi}
-                </h3>
-                <img src="/images/${tradisi.gambar}" style="width:100%; border-radius:8px; margin-bottom:8px"/>
-                <p style="color:#444">${tradisi.deskripsi}</p>
-                <button style="margin-top:10px; background:#a855f7; color:white; padding:6px 10px; border:none; border-radius:6px; cursor:pointer;">
-                  Tutup
-                </button>
+                <h3 class="popup-title">${t.nama_tradisi}</h3>
+                <img src="/images/${t.gambar}" class="popup-img" />
+                <p>${t.deskripsi}</p>
+                <button class="popup-close">Tutup</button>
               `;
               document.body.appendChild(popup);
+              popupRefs.current.push(popup);
 
-              popup
-                .querySelector("button")
-                ?.addEventListener("click", () => popup.remove());
+              popup.querySelector(".popup-close")?.addEventListener("click", () => {
+                popup.remove();
+                popupRefs.current = popupRefs.current.filter((p) => p !== popup);
+              });
             });
 
-            panorama.add(infoSpot);
+            panorama.add(spot);
           });
 
-        // ✅ Tandai panorama sudah ditambahkan infospot
-        panorama.userData.infospotAdded = true;
-      };
+          panorama.userData.infospotAdded = true;
+        };
 
-      // ✅ Tambahkan infospot langsung untuk panorama pertama
-      addInfospots(panoramas[0].gambar);
+        // Load panorama pertama
+        const firstPanorama = new PANOLENS.ImagePanorama(`/images/${panoramas[0].gambar}`);
+        panoramaObjectsRef.current[panoramas[0].gambar] = firstPanorama;
 
-      // ✅ Tambahkan infospot setelah panorama lain dimasuki
-      Object.keys(panoramaObjects).forEach((key) => {
-        panoramaObjects[key].addEventListener("enter", () => addInfospots(key));
-      });
+        viewer.add(firstPanorama);
+        addInfospots(panoramas[0].gambar);
+        setLoading(false);
 
-      // ✅ Navigasi antar panorama
-      for (let i = 0; i < panoramas.length - 1; i++) {
-        const current = panoramaObjects[panoramas[i].gambar];
-        const next = panoramaObjects[panoramas[i + 1].gambar];
-        current.link(next, new THREE.Vector3(3000, 0, 500));
-        next.link(current, new THREE.Vector3(-3000, 0, 500));
-      }
 
-      // ✅ Pop-up Testimoni di panorama terakhir
-      const lastPanorama =
-        panoramaObjects[panoramas[panoramas.length - 1].gambar];
-      lastPanorama.addEventListener("enter", () => {
-        if (!document.querySelector(".popup-testimoni")) {
-          const popup = document.createElement("div");
-          popup.className = "popup-testimoni";
-          popup.style.position = "fixed";
-          popup.style.top = "50%";
-          popup.style.left = "50%";
-          popup.style.transform = "translate(-50%, -50%)";
-          popup.style.background = "rgba(255,255,255,0.97)";
-          popup.style.padding = "20px";
-          popup.style.borderRadius = "12px";
-          popup.style.width = "320px";
-          popup.style.zIndex = "9999";
-          popup.style.textAlign = "center";
-          popup.style.boxShadow = "0 0 25px rgba(168,85,247,0.7)";
-          popup.innerHTML = `
-            <h3 style="font-size:18px; font-weight:bold; color:#a855f7; margin-bottom:10px">
-              Terima Kasih Sudah Menjelajah!
-            </h3>
-            <p style="color:#444; margin-bottom:12px">
-              Bagikan pengalaman Anda melalui testimoni.
-            </p>
-            <button id="goTestimoni" style="background:#a855f7; color:white; padding:8px 12px; border:none; border-radius:6px; cursor:pointer; margin-right:5px">
-              Isi Testimoni
-            </button>
-            <button id="closeTestimoni" style="background:#ccc; color:black; padding:8px 12px; border:none; border-radius:6px; cursor:pointer;">
-              Nanti Saja
-            </button>
-          `;
-          document.body.appendChild(popup);
+        viewer.add(firstPanorama);
 
-          document
-            .getElementById("goTestimoni")
-            ?.addEventListener("click", () => {
+        // Lazy load panorama lainnya
+        panoramas.slice(1).forEach((p) => {
+          const pano = new PANOLENS.ImagePanorama(`/images/${p.gambar}`);
+          panoramaObjectsRef.current[p.gambar] = pano;
+
+          pano.addEventListener("enter", () => {
+            addInfospots(p.gambar);
+          });
+
+          viewer.add(pano);
+        });
+
+        // Link antar panorama (looping)
+        for (let i = 0; i < panoramas.length; i++) {
+          const current = panoramaObjectsRef.current[panoramas[i].gambar];
+          const next = panoramaObjectsRef.current[panoramas[(i + 1) % panoramas.length].gambar];
+          // Anda bisa atur posisi link sesuai kebutuhan
+          current.link(next, new THREE.Vector3(3000, 0, 500));
+        }
+
+        // Pop-up Testimoni di panorama terakhir
+        panoramaObjectsRef.current[panoramas[panoramas.length - 1].gambar].addEventListener("enter", () => {
+          removeAllPopups();
+          if (!document.querySelector(".popup-testimoni")) {
+            const popup = document.createElement("div");
+            popup.className = "popup-testimoni";
+            popup.innerHTML = `
+              <h3 class="popup-title">Terima Kasih!</h3>
+              <p>Bagikan pengalamanmu lewat testimoni.</p>
+              <button class="popup-testimoni-go">Isi Testimoni</button>
+              <button class="popup-testimoni-close">Nanti Saja</button>
+            `;
+            document.body.appendChild(popup);
+            popupRefs.current.push(popup);
+
+            popup.querySelector(".popup-testimoni-go")?.addEventListener("click", () => {
               popup.remove();
+              popupRefs.current = popupRefs.current.filter((p) => p !== popup);
               router.push("/testimoni");
             });
+            popup.querySelector(".popup-testimoni-close")?.addEventListener("click", () => {
+              popup.remove();
+              popupRefs.current = popupRefs.current.filter((p) => p !== popup);
+            });
+          }
+        });
 
-          document
-            .getElementById("closeTestimoni")
-            ?.addEventListener("click", () => popup.remove());
-        }
-      });
+        setTimeout(() => {
+          window.dispatchEvent(new Event("resize"));
+          viewer.update();
+        }, 500);
+      } catch (err) {
+        setError("Terjadi kesalahan saat memuat panorama: " + (err instanceof Error ? err.message : JSON.stringify(err)));
+        setLoading(false);
 
-      setTimeout(() => {
-        window.dispatchEvent(new Event("resize"));
-        viewer.update();
-      }, 800);
+        console.error("PANORAMA ERROR", err);
+      }
     };
 
-    setTimeout(loadPanorama, 500);
-    return () => viewer && viewer.dispose();
-  }, [loading, router]);
+    loadPanorama();
+
+    return () => {
+      isMounted = false;
+      // Cleanup viewer
+      if (viewerRef.current) {
+        viewerRef.current.dispose();
+        viewerRef.current = null;
+      }
+      // Cleanup popup
+      removeAllPopups();
+    };
+  }, [router]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-black">
+    <div className="min-h-screen bg-black">
       <Navbar />
       {loading && <Loader />}
-      <div id="panorama" className="h-screen w-full bg-black"></div>
+      {error && (
+        <div className="fixed top-0 left-0 w-full bg-red-500 text-white text-center py-2 z-[99999]">
+          {error}
+        </div>
+      )}
+      <div id="panorama" className="h-screen w-full" />
+<style jsx global>{`
+  .popup-tradisi, .popup-testimoni {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    color: black;
+    padding: 20px 15px;
+    border-radius: 12px;
+    width: 320px;
+    z-index: 9999;
+    font-size: 14px;
+    box-shadow: 0 0 25px rgba(168,85,247,0.7);
+    text-align: center;
+  }
+
+  /* 🌙 Dark mode support */
+  .dark .popup-tradisi,
+  .dark .popup-testimoni {
+    background: #1f2937; /* dark gray */
+    color: #f9fafb;       /* text-white */
+  }
+
+  .popup-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+
+  .popup-img {
+    width: 100%;
+    margin: 10px 0;
+    border-radius: 8px;
+  }
+
+  .popup-close,
+  .popup-testimoni-go,
+  .popup-testimoni-close {
+    margin-top: 10px;
+    margin-right: 8px;
+    padding: 6px 16px;
+    border: none;
+    border-radius: 6px;
+    background: #a855f7;
+    color: white;
+    cursor: pointer;
+  }
+
+  .popup-testimoni-close {
+    background: #aaa;
+  }
+
+  .dark .popup-testimoni-close {
+    background: #4b5563; /* dark gray in dark mode */
+  }
+`}</style>
     </div>
   );
 }

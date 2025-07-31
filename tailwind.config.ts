@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  darkMode: "class", // ✅ WAJIB biar bisa toggle dark/light
+  darkMode: "class", 
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -13,7 +13,6 @@ const config: Config = {
         sans: ["Poppins", "sans-serif"],
       },
       colors: {
-        // ✅ opsional, tetap bisa pakai var(--...) jika mau
         background: "var(--background)",
         foreground: "var(--foreground)",
       },

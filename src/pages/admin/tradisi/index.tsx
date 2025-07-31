@@ -14,17 +14,31 @@ interface Tradisi {
   posisi_z: number;
 }
 
+interface Panorama {
+  id_panorama: number;
+  nama_lokasi: string;
+  gambar: string;
+}
+
 export default function TradisiAdmin() {
   const [tradisi, setTradisi] = useState<Tradisi[]>([]);
+  const [panoramaList, setPanoramaList] = useState<Panorama[]>([]);
   const [form, setForm] = useState<Partial<Tradisi>>({});
+  const [file, setFile] = useState<File | null>(null);
+  const [previewPanoramaUrl, setPreviewPanoramaUrl] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
-      const res = await fetch("/api/tradisi");
-      const data = await res.json();
-      setTradisi(Array.isArray(data) ? data : []);
+      const [resTradisi, resPanorama] = await Promise.all([
+        fetch("/api/tradisi"),
+        fetch("/api/panorama"),
+      ]);
+      const tradisiData = await resTradisi.json();
+      const panoramaData = await resPanorama.json();
+      setTradisi(Array.isArray(tradisiData) ? tradisiData : []);
+      setPanoramaList(Array.isArray(panoramaData) ? panoramaData : []);
     } catch {
-      toast.error("Gagal memuat data tradisi");
+      toast.error("Gagal memuat data");
     }
   };
 
@@ -36,26 +50,43 @@ export default function TradisiAdmin() {
     if (
       !form.nama_tradisi ||
       !form.deskripsi ||
-      !form.gambar ||
+      (!form.id_tradisi && !file) ||
       !form.panorama ||
-      !form.posisi_x ||
-      !form.posisi_y ||
-      !form.posisi_z
+      form.posisi_x === undefined ||
+      form.posisi_y === undefined ||
+      form.posisi_z === undefined
     ) {
       toast.error("Semua field wajib diisi!");
       return;
     }
+
+    const formData = new FormData();
+    formData.append("nama_tradisi", form.nama_tradisi);
+    formData.append("deskripsi", form.deskripsi);
+    formData.append("panorama", form.panorama);
+    formData.append("posisi_x", String(form.posisi_x));
+    formData.append("posisi_y", String(form.posisi_y));
+    formData.append("posisi_z", String(form.posisi_z));
+    if (file) {
+      formData.append("gambar", file);
+    } else if (form.gambar) {
+      formData.append("gambar", form.gambar);
+    }
+    if (form.id_tradisi) {
+      formData.append("id_tradisi", String(form.id_tradisi));
+    }
+
     try {
       const res = await fetch("/api/tradisi", {
         method: form.id_tradisi ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: formData,
       });
       if (!res.ok) throw new Error();
-      toast.success(
-        form.id_tradisi ? "Tradisi berhasil diperbarui!" : "Tradisi berhasil ditambahkan!"
-      );
+      toast.success(form.id_tradisi ? "Berhasil diperbarui!" : "Berhasil ditambahkan!");
       setForm({});
+      setFile(null);
+      setPreviewPanoramaUrl(null);
+      (document.getElementById("gambar") as HTMLInputElement).value = "";
       loadData();
     } catch {
       toast.error("Terjadi kesalahan saat menyimpan tradisi");
@@ -88,7 +119,7 @@ export default function TradisiAdmin() {
           ✨ Kelola Tradisi Budaya
         </h1>
 
-        {/* Form Tambah/Edit */}
+        {/* Form Input */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg mb-10">
           <h2 className="text-lg font-bold text-gray-700 dark:text-white mb-4">
             {form.id_tradisi ? "🔄 Edit Tradisi" : "➕ Tambah Tradisi"}
@@ -98,64 +129,70 @@ export default function TradisiAdmin() {
               placeholder="Nama Tradisi"
               className="border p-3 rounded-lg focus:ring-2 focus:ring-purple-400 dark:bg-gray-700 dark:text-white"
               value={form.nama_tradisi || ""}
-              onChange={(e) =>
-                setForm({ ...form, nama_tradisi: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, nama_tradisi: e.target.value })}
             />
             <input
-              placeholder="Nama Gambar (contoh: manene.jpg)"
-              className="border p-3 rounded-lg focus:ring-2 focus:ring-purple-400 dark:bg-gray-700 dark:text-white"
-              value={form.gambar || ""}
-              onChange={(e) => setForm({ ...form, gambar: e.target.value })}
+              id="gambar"
+              type="file"
+              accept="image/*"
+              className="border p-3 rounded-lg bg-white dark:bg-gray-700 dark:text-white"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
             />
             <textarea
               placeholder="Deskripsi Tradisi"
               className="border p-3 rounded-lg col-span-2 focus:ring-2 focus:ring-purple-400 dark:bg-gray-700 dark:text-white"
               rows={3}
               value={form.deskripsi || ""}
-              onChange={(e) =>
-                setForm({ ...form, deskripsi: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, deskripsi: e.target.value })}
             />
-            <input
-              placeholder="Panorama (contoh: panorama1.jpg)"
+            <select
               className="border p-3 rounded-lg focus:ring-2 focus:ring-purple-400 dark:bg-gray-700 dark:text-white"
               value={form.panorama || ""}
-              onChange={(e) => setForm({ ...form, panorama: e.target.value })}
-            />
-            <input
-              type="number"
-              placeholder="Posisi X"
-              className="border p-3 rounded-lg focus:ring-2 focus:ring-purple-400 dark:bg-gray-700 dark:text-white"
-              value={form.posisi_x || ""}
-              onChange={(e) =>
-                setForm({ ...form, posisi_x: parseInt(e.target.value) })
-              }
-            />
-            <input
-              type="number"
-              placeholder="Posisi Y"
-              className="border p-3 rounded-lg focus:ring-2 focus:ring-purple-400 dark:bg-gray-700 dark:text-white"
-              value={form.posisi_y || ""}
-              onChange={(e) =>
-                setForm({ ...form, posisi_y: parseInt(e.target.value) })
-              }
-            />
-            <input
-              type="number"
-              placeholder="Posisi Z"
-              className="border p-3 rounded-lg focus:ring-2 focus:ring-purple-400 dark:bg-gray-700 dark:text-white"
-              value={form.posisi_z || ""}
-              onChange={(e) =>
-                setForm({ ...form, posisi_z: parseInt(e.target.value) })
-              }
-            />
+              onChange={(e) => {
+                const selected = e.target.value;
+                setForm({ ...form, panorama: selected });
+                setPreviewPanoramaUrl(`/images/${selected}`);
+              }}
+            >
+              <option value="">Pilih panorama</option>
+              {panoramaList.map((pano) => (
+                <option key={pano.id_panorama} value={pano.gambar}>
+                  {pano.nama_lokasi} ({pano.gambar})
+                </option>
+              ))}
+            </select>
+
+            {previewPanoramaUrl && (
+              <div className="col-span-2">
+                <img
+                  src={previewPanoramaUrl}
+                  alt="Preview Panorama"
+                  className="rounded-lg w-full h-40 object-cover border"
+                />
+              </div>
+            )}
+
+            {["x", "y", "z"].map((axis) => (
+              <input
+                key={axis}
+                type="number"
+                placeholder={`Posisi ${axis.toUpperCase()}`}
+                className="border p-3 rounded-lg focus:ring-2 focus:ring-purple-400 dark:bg-gray-700 dark:text-white"
+                value={form[`posisi_${axis}` as keyof Tradisi] || ""}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    [`posisi_${axis}`]: parseFloat(e.target.value),
+                  })
+                }
+              />
+            ))}
           </div>
           <button
             onClick={handleSave}
             className="mt-4 w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white py-3 rounded-lg hover:opacity-90 transition font-bold"
           >
-            {form.id_tradisi ? "Simpan Perubahan" : "Tambah Tradisi"}
+            {form.id_tradisi ? "💾 Simpan Perubahan" : "➕ Tambah Tradisi"}
           </button>
         </div>
 
@@ -168,7 +205,7 @@ export default function TradisiAdmin() {
             {tradisi.map((t) => (
               <div
                 key={t.id_tradisi}
-                className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 flex flex-col justify-between hover:scale-105 transition transform duration-300"
+                className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 flex flex-col justify-between hover:scale-[1.02] transition-transform duration-300"
               >
                 <img
                   src={`/images/${t.gambar}`}
@@ -182,23 +219,27 @@ export default function TradisiAdmin() {
                   <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
                     {t.deskripsi}
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Panorama: {t.panorama} | Posisi: {t.posisi_x},{" "}
-                    {t.posisi_y}, {t.posisi_z}
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    🌄 Panorama: {t.panorama} <br />
+                    🎯 Posisi: ({t.posisi_x}, {t.posisi_y}, {t.posisi_z})
                   </p>
                 </div>
                 <div className="flex justify-between gap-2 mt-4">
                   <button
                     className="flex-1 bg-yellow-400 px-3 py-2 rounded text-white font-semibold hover:opacity-90"
-                    onClick={() => setForm(t)}
+                    onClick={() => {
+                      setForm(t);
+                      setFile(null);
+                      setPreviewPanoramaUrl(`/images/${t.panorama}`);
+                    }}
                   >
-                    Edit
+                    ✏️ Edit
                   </button>
                   <button
                     className="flex-1 bg-red-500 px-3 py-2 rounded text-white font-semibold hover:opacity-90"
                     onClick={() => handleDelete(t.id_tradisi)}
                   >
-                    Hapus
+                    🗑 Hapus
                   </button>
                 </div>
               </div>

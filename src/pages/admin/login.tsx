@@ -34,41 +34,53 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-100 via-purple-100 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-black">
-      <Toaster />
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-center mb-4 text-pink-600 dark:text-pink-400">
-          🔐 Admin Login
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-100 via-purple-100 to-indigo-200 dark:from-gray-900 dark:via-gray-800 dark:to-black transition-all">
+      <Toaster position="top-center" />
+      <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-xl w-full max-w-sm border border-gray-200 dark:border-gray-700">
+        <h1 className="text-3xl font-extrabold text-center mb-6 text-pink-600 dark:text-pink-400 tracking-tight">
+          Admin Panel
         </h1>
-        <form onSubmit={handleLogin} className="space-y-4">
+        <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-6">
+          Masuk untuk mengelola testimoni dan panorama
+        </p>
+        <form onSubmit={handleLogin} className="space-y-5">
           <div>
+            <label className="block mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Username
+            </label>
             <input
               type="text"
-              placeholder="Username"
+              placeholder="Masukkan username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full p-2 border rounded-lg dark:bg-gray-700 dark:text-white"
+              className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500 transition"
               required
             />
           </div>
           <div>
+            <label className="block mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Password
+            </label>
             <input
               type="password"
-              placeholder="Password"
+              placeholder="Masukkan password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-2 border rounded-lg dark:bg-gray-700 dark:text-white"
+              className="w-full p-3 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
               required
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white p-2 rounded-lg hover:opacity-90 transition"
+            className="w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white font-semibold p-3 rounded-xl hover:opacity-90 transition disabled:opacity-60"
           >
-            {loading ? "Memproses..." : "Login"}
+            {loading ? "Memproses..." : "Masuk"}
           </button>
         </form>
+        <p className="mt-6 text-xs text-center text-gray-500 dark:text-gray-400">
+          &copy; {new Date().getFullYear()} Ne' Gandeng Admin. All rights reserved.
+        </p>
       </div>
     </div>
   );
